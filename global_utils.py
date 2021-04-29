@@ -139,6 +139,8 @@ def env_stat(x, outputs, y, g, model, criterion):
                 ey.float()).item()})
     return env_stats
 
-
-
+def save_cmd(logger_path, sys_argv): # sys.argv
+    with open(os.path.join(logger_path, "cmd.tex"), "w") as f:
+        f.write('python ' + ' '.join(sys_argv))
+        print("outputing cmd to cmd.txt")
 
