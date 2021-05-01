@@ -3,8 +3,15 @@ import os
 import numpy as np
 
 def args2header(args, default_dict=None):
+    from datetime import datetime
+    time_header = datetime.strftime(
+        datetime.now(),
+        "%H:%M:%S")
+    date_header = datetime.strftime(
+        datetime.now(),
+        "%Y%m%d")
     exDict = vars(args)
-    loggers = []
+    loggers = [date_header, time_header]
     def convert_args_to_logger(k):
         return ("".join([x[:2] for x in k.split("_")])).upper()
     for k, v in exDict.items():
@@ -20,26 +27,40 @@ def args2header(args, default_dict=None):
                 "sfx:%s" %(exDict["sfx"]))
     return "_".join(loggers)
 
-def save_cmd(args, logger_path):
+def save_args(args, logger_path):
     import json
     exDict = vars(args)
     with open(logger_path+ "/args", 'w') as f:
         f.write(json.dumps(exDict))
 
 class LYCSVLogger(object):
-    def __init__(self, csv_path, mode="w"):
+    def __init__(self, csv_path, mode="w", log_every=10):
         self.csv_path = csv_path
         self.mode = mode
         self.states_list = []
+        self.log_every = log_every
+        self.count = 0
 
-    def log(self, epoch, batch, stats_dict):
+    def log(self, epoch, batch, stats_dict, restart=None):
+        self.count += 1
         if "epoch" not in stats_dict:
             stats_dict.update({"epoch": epoch})
+        if restart is not None:
+            if "restart" not in stats_dict:
+                stats_dict.update(
+                    {"restart": restart})
         if "batch" not in stats_dict:
             stats_dict.update({"batch": batch})
         self.states_list.append(stats_dict)
+        if self.count % self.log_every == 0:
+            self.form_and_output()
+
+    def form_and_output(self):
         self.stats_df = pd.DataFrame(self.states_list)
         self.stats_df.to_csv(self.csv_path, index=False)
+
+    def close(self):
+        self.form_and_output()
 
 class LYCSVStepLogger(object):
     def __init__(self, csv_path=None, save_interval=20):
@@ -139,7 +160,7 @@ def env_stat(x, outputs, y, g, model, criterion):
                 ey.float()).item()})
     return env_stats
 
-def save_cmd(logger_path, sys_argv): # sys.argv
+def save_cmd(sys_argv, logger_path): # sys.argv
     with open(os.path.join(logger_path, "cmd.tex"), "w") as f:
         f.write('python ' + ' '.join(sys_argv))
         print("outputing cmd to cmd.txt")
