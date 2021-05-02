@@ -1,4 +1,5 @@
 import datetime
+import os
 import pandas as pd
 import pandas as pd
 import matplotlib
@@ -8,25 +9,24 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import json
 from collections import defaultdict
-from utils import convert_fmt
 
 
-def find_logs_by_multikeys(keys, datasets, inclstr=[], exclstr=[]):
+def find_logs_by_multikeys(path, key, inclstr=[], exclstr=[]):
     assert isinstance(keys, list)
     keys_list = []
     for key in keys:
-        keys_list += find_logs_by_keys(key, datasets, inclstr=inclstr, exclstr=exclstr)
+        keys_list += find_logs(path, key, inclstr=inclstr, exclstr=exclstr)
     return keys_list
 
 
-def find_logs(path, key, include_str, exclude_str):
+def find_logs(path, key, include_str=[], exclude_str=[]):
     # path is the log of log files
     # key use to find the files
     # include strings should be [abc, de] abc and de must be in the name
     # exclude ~~~ not in the name
     log_list = os.listdir(path)
     log_list.sort()
-    include_str = [log for log in log_list if key in log]
+    full_logs = ["%s/%s" % (path, log) for log in log_list if key in log]
     if len(include_str) > 0:
         for instr in include_str:
             full_logs = [fl for fl in full_logs if instr in fl]
@@ -36,7 +36,8 @@ def find_logs(path, key, include_str, exclude_str):
     return full_logs
 
 
-def value_of_log(exps, exclude_list=[]):
+def find_models_in_logs(exps, exclude_list=[]):
+    # find the iterpretable keys of log files
     # input a list of log file names
     # output a dict, key=file name, value=the simplied notation
     # if you want to exclude some key in the returned value, put in exclude_list
@@ -73,7 +74,7 @@ def eval_run(df, value_list=[], slice_by=None, order_by=None, loc_type="last", b
         slices = list(np.unique(df[slice_by]))
         dfs = []
         for isl in slices:
-            dfs.append(df[slice_by] = isl)
+            dfs.append(df[df[slice_by] == isl])
     else:
         dfs = [df]
     ress = []
@@ -84,3 +85,32 @@ def eval_run(df, value_list=[], slice_by=None, order_by=None, loc_type="last", b
         res.update({"best_loc": -1, "total_epoch": idfs.shape[0]})
         ress.append(res)
     return ress
+
+def format_groupby(res_df, key="model", 
+                   mean_std_flds=["train_nll","train_penalty","train_acc","test_acc"],
+                   mean_flds=["total_epoch"],
+                   count_flds=["best_loc"],
+                   mean_std_latex_form=True):
+    out_df = res_df.groupby(key).agg(["mean", "std", "count"]).reset_index()
+    format_result = []
+    for ir in range(out_df.shape[0]):
+        count = -1
+        one_dict = {"model": out_df.iloc[ir][key][0]}
+        for ifd in mean_std_flds:
+            meanifd = out_df.iloc[ir][(ifd, "mean")]
+            stdifd = out_df.iloc[ir][(ifd, "std")]
+            if np.isnan(stdifd):
+                format_ifd = ("%.2f" % meanifd)
+            else:
+                format_ifd = ("$%.2f \pm %.2f$" % (meanifd , stdifd))
+            one_dict.update({ifd: format_ifd})
+        for ifd in mean_flds:
+            meanifd = out_df.iloc[ir][(ifd, "mean")]
+            format_ifd = ("%.2f" % meanifd)
+            one_dict.update({ifd: format_ifd})
+        for ifd in count_flds:
+            countifd = out_df.iloc[ir][(ifd, "count")]
+            one_dict.update({ifd: countifd})
+        format_result.append(one_dict)
+    format_df = pd.DataFrame(format_result)
+    return format_df
